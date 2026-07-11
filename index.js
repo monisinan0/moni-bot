@@ -83,6 +83,7 @@ function parseGoalMessage(content) {
   return { skip: false, items };
 }
 
+// 「今日の目標」チャンネルから、配信者本人が投稿した直近のメッセージを取得
 async function fetchLatestGoalMessage(guild) {
   const channel = await guild.channels.fetch(CHANNEL_GOAL_ID);
   const messages = await channel.messages.fetch({ limit: 20 });
@@ -90,6 +91,19 @@ async function fetchLatestGoalMessage(guild) {
     .filter((m) => m.author.id === STREAMER_USER_ID)
     .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
   return streamerMessages.first() || null;
+}
+
+// 未達成時にランダムで使う煽り文言
+const TAUNT_MESSAGES = [
+  'みんな煽っていいよ🔥',
+  'おサボり雑魚しなの❗️叩け叩け❗️',
+  'また未達成だってよ、どうする?w',
+  '今日も有言不実行、煽っていいぞ',
+  '口だけ番長、今日も敗北',
+];
+
+function getRandomTaunt() {
+  return TAUNT_MESSAGES[Math.floor(Math.random() * TAUNT_MESSAGES.length)];
 }
 
 // ==========================================
@@ -135,26 +149,11 @@ async function checkDailyGoal() {
     saveState(state);
 
     const unmetText = unmet.map((i) => i.raw).join('\n');
-    const notifyMsg = await watchChannel.send(
+    await watchChannel.send(
       `未達成あり… (${achieved.length}/${parsed.items.length})\n\n` +
       `【未達成項目】\n${unmetText}\n\n` +
-      `みんな煽っていいよ🔥`
+      `${getRandomTaunt()}`
     );
-
-    setTimeout(async () => {
-      try {
-        const fresh = await watchChannel.messages.fetch(notifyMsg.id);
-        const totalReactions = fresh.reactions.cache.reduce((sum, r) => sum + r.count, 0);
-        if (totalReactions === 0) {
-          const screamChannel = await guild.channels.fetch(CHANNEL_SCREAM_ID);
-          await screamChannel.send(
-            `未達！！！うわあああああ！！！\n${unmetText}`
-          );
-        }
-      } catch (e) {
-        console.error('1時間後チェックでエラー:', e);
-      }
-    }, 60 * 60 * 1000);
   }
 }
 

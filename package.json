@@ -1,0 +1,15 @@
+{
+  "name": "moni-bot",
+  "version": "1.0.0",
+  "description": "もにしなの目標達成/未達成を自動判定して通知するDiscord Bot",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.4.5"
+  }
+}

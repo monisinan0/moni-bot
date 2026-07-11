@@ -9,8 +9,6 @@
 // CHANNEL_GOAL_ID       「今日の目標」チャンネルのID
 // CHANNEL_WATCH_ID      「もに監視所」チャンネルのID
 // CHANNEL_SCREAM_ID     「悲鳴」チャンネルのID
-// ACTIVE_HOURS_START    活動時間の開始(24時間表記、例: 22)
-// ACTIVE_HOURS_END      活動時間の終了(24時間表記、例: 24。日をまたぐ場合も0-24の範囲でOK)
 //
 // ※ トークンなどの秘密情報はコードに直接書かず、必ず環境変数で渡すこと。
 
@@ -29,8 +27,6 @@ const STREAMER_USER_ID = process.env.STREAMER_USER_ID;
 const CHANNEL_GOAL_ID = process.env.CHANNEL_GOAL_ID;
 const CHANNEL_WATCH_ID = process.env.CHANNEL_WATCH_ID;
 const CHANNEL_SCREAM_ID = process.env.CHANNEL_SCREAM_ID;
-const ACTIVE_HOURS_START = parseInt(process.env.ACTIVE_HOURS_START || '22', 10);
-const ACTIVE_HOURS_END = parseInt(process.env.ACTIVE_HOURS_END || '24', 10);
 
 // 連続達成日数などを保存する簡易ファイル
 const STATE_FILE = path.join(__dirname, 'state.json');
@@ -65,15 +61,6 @@ client.once('ready', () => {
 // ==========================================
 // 「今日の目標」メッセージを解析する
 // ==========================================
-// フォーマット例:
-// 1️⃣パルクール設定見直し→✅
-// 2️⃣歌枠リクエスト曲覚えられるだけ覚える→
-// 3️⃣デスクトップ整理→
-//
-// 番号絵文字(1️⃣〜9️⃣)で始まる行を1項目として数え、
-// その行の中に ✅ があれば達成、なければ未達成として扱う。
-// 🌙 が本文に含まれる場合は「お休み日」として判定自体をスキップする。
-
 const NUMBER_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
 
 function parseGoalMessage(content) {
@@ -96,7 +83,6 @@ function parseGoalMessage(content) {
   return { skip: false, items };
 }
 
-// 「今日の目標」チャンネルから、配信者本人が投稿した直近のメッセージを取得
 async function fetchLatestGoalMessage(guild) {
   const channel = await guild.channels.fetch(CHANNEL_GOAL_ID);
   const messages = await channel.messages.fetch({ limit: 20 });
@@ -138,7 +124,6 @@ async function checkDailyGoal() {
   const achieved = parsed.items.filter((i) => i.achieved);
 
   if (unmet.length === 0) {
-    // 全達成
     state.streak = (state.streak || 0) + 1;
     saveState(state);
     await watchChannel.send(
@@ -146,7 +131,6 @@ async function checkDailyGoal() {
       `🔥 連続達成 ${state.streak} 日目！`
     );
   } else {
-    // 未達成あり
     state.streak = 0;
     saveState(state);
 
@@ -157,7 +141,6 @@ async function checkDailyGoal() {
       `みんな煽っていいよ🔥`
     );
 
-    // 1時間後、反応(リアクション)が無ければ悲鳴チャンネルで騒ぐ
     setTimeout(async () => {
       try {
         const fresh = await watchChannel.messages.fetch(notifyMsg.id);
@@ -171,52 +154,33 @@ async function checkDailyGoal() {
       } catch (e) {
         console.error('1時間後チェックでエラー:', e);
       }
-    }, 60 * 60 * 1000); // 1時間
+    }, 60 * 60 * 1000);
   }
 }
 
 // ==========================================
-// 活動時間中の「沈黙検知」
+// 正午チェック: 今日の目標がまだ投稿されてないか確認
 // ==========================================
-// 稼働時間帯(ACTIVE_HOURS_START〜ACTIVE_HOURS_END)の間、
-// 「悲鳴」チャンネルに配信者本人の投稿が一定時間(60分)無ければ
-// 監視所に「動いてる?」と自動投稿する。1日1回だけ。
-
-async function checkSilence() {
+async function checkGoalPosted() {
   const now = new Date();
-  // Asia/Tokyo基準の時刻を取得
-  const jstHour = parseInt(
-    now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo', hour: '2-digit', hour12: false })
-  );
-
-  const inActiveWindow =
-    ACTIVE_HOURS_START <= ACTIVE_HOURS_END
-      ? jstHour >= ACTIVE_HOURS_START && jstHour < ACTIVE_HOURS_END
-      : jstHour >= ACTIVE_HOURS_START || jstHour < ACTIVE_HOURS_END;
-
-  if (!inActiveWindow) return;
-
-  const state = loadState();
   const todayStr = now.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' });
 
-  // 今日すでにピング済みならスキップ
+  const state = loadState();
+
   if (state.lastPingDate === todayStr) return;
 
   const guild = client.guilds.cache.first();
   if (!guild) return;
 
-  const screamChannel = await guild.channels.fetch(CHANNEL_SCREAM_ID);
-  const messages = await screamChannel.messages.fetch({ limit: 20 });
-  const streamerMessages = messages.filter((m) => m.author.id === STREAMER_USER_ID);
+  const goalMessage = await fetchLatestGoalMessage(guild);
 
-  const latest = streamerMessages.sort((a, b) => b.createdTimestamp - a.createdTimestamp).first();
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  const postedToday =
+    goalMessage &&
+    goalMessage.createdAt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' }) === todayStr;
 
-  const isSilent = !latest || latest.createdTimestamp < oneHourAgo;
-
-  if (isSilent) {
+  if (!postedToday) {
     const watchChannel = await guild.channels.fetch(CHANNEL_WATCH_ID);
-    await watchChannel.send('あれ、もにしなの動いてる…？👀');
+    await watchChannel.send('あれ、今日の目標まだ来てない…？👀 もにしなの大丈夫かな');
     state.lastPingDate = todayStr;
     saveState(state);
   }
@@ -226,14 +190,12 @@ async function checkSilence() {
 // スケジュール登録
 // ==========================================
 function scheduleJobs() {
-  // 毎日深夜1時(JST)に達成判定
   cron.schedule('0 1 * * *', () => {
     checkDailyGoal().catch((e) => console.error('checkDailyGoalでエラー:', e));
   }, { timezone: 'Asia/Tokyo' });
 
-  // 30分おきに沈黙チェック
-  cron.schedule('*/30 * * * *', () => {
-    checkSilence().catch((e) => console.error('checkSilenceでエラー:', e));
+  cron.schedule('0 12 * * *', () => {
+    checkGoalPosted().catch((e) => console.error('checkGoalPostedでエラー:', e));
   }, { timezone: 'Asia/Tokyo' });
 
   console.log('スケジュール登録完了');

@@ -179,7 +179,7 @@ async function checkGoalPosted() {
 
   if (!postedToday) {
     const watchChannel = await guild.channels.fetch(CHANNEL_WATCH_ID);
-    await watchChannel.send('あれ、今日の目標まだ来てない…？👀 もにしなの大丈夫かな');
+    await watchChannel.send('もにしなの、どうした❓️ｗ今日の目標宣言がまだです。');
     state.lastPingDate = todayStr;
     saveState(state);
   }

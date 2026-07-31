@@ -98,8 +98,8 @@ const TAUNT_MESSAGES = [
   'みんな煽っていいよ🔥',
   'おサボり雑魚しなの❗️叩け叩け❗️',
   'また未達成だってよ、どうする?w',
-  '今日も有言不実行、ええんか？',
-  'もにしなのさぁ・・・',
+  '今日も有言不実行、煽っていいぞ',
+  '口だけ番長、今日も敗北',
 ];
 
 function getRandomTaunt() {
@@ -107,7 +107,7 @@ function getRandomTaunt() {
 }
 
 // ==========================================
-// 深夜1時: 達成/未達成の判定 → 監視所に通知
+// 朝6時: 達成/未達成の判定 → 監視所に通知
 // ==========================================
 async function checkDailyGoal() {
   const guild = client.guilds.cache.first();
@@ -189,10 +189,12 @@ async function checkGoalPosted() {
 // スケジュール登録
 // ==========================================
 function scheduleJobs() {
-  cron.schedule('0 1 * * *', () => {
+  // 毎日朝6時(JST)に達成判定
+  cron.schedule('0 6 * * *', () => {
     checkDailyGoal().catch((e) => console.error('checkDailyGoalでエラー:', e));
   }, { timezone: 'Asia/Tokyo' });
 
+  // 毎日12時(JST)に目標宣言が来てるかチェック
   cron.schedule('0 12 * * *', () => {
     checkGoalPosted().catch((e) => console.error('checkGoalPostedでエラー:', e));
   }, { timezone: 'Asia/Tokyo' });
